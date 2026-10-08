@@ -12,7 +12,6 @@ import sys
 import urllib.request
 
 MONTH = re.compile(r"^(\d{4})(\d{2})\.csv$")
-SUMMARY = re.compile(r"^summary/(\d{4})(\d{2})-summary\.csv$")
 ZERO = "0" * 40
 
 
@@ -46,7 +45,7 @@ def main():
     if not before or before == ZERO or git("cat-file", "-e", before + "^{commit}") is None:
         before = (git("rev-parse", after + "^") or "").strip() or None
     diff = git("diff", "--name-only", before, after) if before else git("ls-tree", "--name-only", after)
-    names = sorted(n for n in (diff or "").splitlines() if MONTH.match(n) or SUMMARY.match(n))
+    names = sorted(n for n in (diff or "").splitlines() if MONTH.match(n))
 
     lines = []
     if os.environ.get("EVENT") == "workflow_dispatch":
@@ -65,13 +64,6 @@ def main():
                 lines.append(f"・{label}:{new - old:+d}局(計{new}局)")
             else:
                 lines.append(f"・{label}の戦績を更新(計{new}局)")
-            continue
-        m = SUMMARY.match(n)
-        label = f"{m.group(1)}年{m.group(2)}月"
-        if games(after, n) is None:
-            lines.append(f"・{label}の詳細成績を削除")
-        else:
-            lines.append(f"・{label}の詳細成績を更新")
 
     if not lines:
         print("通知する変更なし")
