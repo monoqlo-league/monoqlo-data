@@ -73,8 +73,24 @@ BANの対象は、**麻雀のゲーム性を損なう不正**(チーミングや
 - BAN月以降は入賞の対象外になり、ほかのプレイヤーの順位が繰り上がる。
 - 追加するときは1行足して上書きアップロードする。ファイルが無ければBANなしとして扱う。
 
+## Discordへの更新通知
+
+対局記録(`YYYYMM.csv`)か詳細成績(`YYYYMM-summary.csv`)をアップロードすると、Discordのチャンネルに自動で通知が届く。増えた対局数とランキングのURLが載る。`ban.csv` や README の変更では通知しない。
+
+通知先の設定(管理者が最初に1回だけ行う):
+
+1. Discordで、通知したいチャンネルの「チャンネルの編集」→「連携サービス」→「ウェブフック」→「新しいウェブフック」を押す。名前とアイコンは自由。
+2. 「ウェブフックURLをコピー」を押す。
+3. このリポジトリの「Settings」→「Secrets and variables」→「Actions」→「New repository secret」を押す。
+4. Name に **`DISCORD_WEBHOOK_URL`**、Secret にコピーしたURLを貼り付けて「Add secret」を押す。
+
+- ウェブフックURLを知っている人は誰でもそのチャンネルに投稿できる。URLは Secret にだけ置き、ファイルや会話には書かない。漏れたら Discord でウェブフックを削除して作り直し、Secret を更新する。
+- Secret が未設定のあいだは、通知を送らずに終わる(エラーにはならない)。
+- 通知の動作は「Actions」タブで確認できる。仕組みは `.github/workflows/discord-notify.yml` と `.github/notify-discord.py`。
+
 ## ファイル
 
 - `YYYYMM.csv` … 各シーズンの対局記録
 - `YYYYMM-summary.csv` … 各シーズンの詳細成績の集計(牌譜から書き出したもの。ある月だけ)
 - `ban.csv` … BANリスト
+- `.github/` … Discordへの更新通知の仕組み(変更しない)
