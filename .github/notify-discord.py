@@ -12,7 +12,7 @@ import sys
 import urllib.request
 
 MONTH = re.compile(r"^(\d{4})(\d{2})\.csv$")
-SUMMARY = re.compile(r"^(\d{4})(\d{2})-summary\.csv$")
+SUMMARY = re.compile(r"^summary/(\d{4})(\d{2})-summary\.csv$")
 ZERO = "0" * 40
 
 

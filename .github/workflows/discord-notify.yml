@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths:
       - "[0-9][0-9][0-9][0-9][0-9][0-9].csv"
-      - "[0-9][0-9][0-9][0-9][0-9][0-9]-summary.csv"
+      - "summary/[0-9][0-9][0-9][0-9][0-9][0-9]-summary.csv"
   # 「Actions」タブから手動でテスト送信できる
   workflow_dispatch:
 
