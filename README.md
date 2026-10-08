@@ -86,6 +86,8 @@ BANの対象は、**麻雀のゲーム性を損なう不正**(チーミングや
 
 - ウェブフックURLを知っている人は誰でもそのチャンネルに投稿できる。URLは Secret にだけ置き、ファイルや会話には書かない。漏れたら Discord でウェブフックを削除して作り直し、Secret を更新する。
 - Secret が未設定のあいだは、通知を送らずに終わる(エラーにはならない)。
+- 中身が前と同じCSVを上げ直した場合は、変更なしとして扱われ通知しない。
+- 設定の確認は「Actions」タブ →「Discordへ更新を通知」→「Run workflow」で、テストの通知を送れる。
 - 通知の動作は「Actions」タブで確認できる。仕組みは `.github/workflows/discord-notify.yml` と `.github/notify-discord.py`。
 
 ## ファイル

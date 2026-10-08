@@ -30,6 +30,16 @@ def games(rev, name):
     return sum(1 for r in rows if (r.get("非表示状態") or "").strip().lower() != "yes")
 
 
+def test_message():
+    """手動実行のときのテスト送信。最新の月の対局数を添える。"""
+    months = sorted(n for n in (git("ls-tree", "--name-only", "HEAD") or "").splitlines() if MONTH.match(n))
+    lines = ["🔔 **通知のテスト**", "この通知が見えていれば、ランキング更新の通知はこのチャンネルに届きます。"]
+    if months:
+        m = MONTH.match(months[-1])
+        lines.append(f"現在の最新:{m.group(1)}年{m.group(2)}月(計{games('HEAD', months[-1])}局)")
+    return lines
+
+
 def main():
     before = os.environ.get("BEFORE") or ""
     after = os.environ.get("AFTER") or "HEAD"
@@ -39,6 +49,9 @@ def main():
     names = sorted(n for n in (diff or "").splitlines() if MONTH.match(n) or SUMMARY.match(n))
 
     lines = []
+    if os.environ.get("EVENT") == "workflow_dispatch":
+        names = []
+        lines = test_message()
     for n in names:
         m = MONTH.match(n)
         if m:
@@ -65,8 +78,9 @@ def main():
         return
 
     page = os.environ.get("PAGE_URL", "")
+    head = [] if lines[0].startswith("🔔") else ["📊 **ランキングを更新しました**"]
     content = "\n".join(
-        ["📊 **ランキングを更新しました**", *lines, "", f"ランキング:{page}", "(ページへの反映に数分かかることがあります)"]
+        [*head, *lines, "", f"ランキング:{page}", "(ページへの反映に数分かかることがあります)"]
     )
     print(content)
 

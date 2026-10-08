@@ -8,6 +8,8 @@ on:
     paths:
       - "[0-9][0-9][0-9][0-9][0-9][0-9].csv"
       - "[0-9][0-9][0-9][0-9][0-9][0-9]-summary.csv"
+  # 「Actions」タブから手動でテスト送信できる
+  workflow_dispatch:
 
 concurrency:
   group: discord-notify
@@ -27,5 +29,6 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
           PAGE_URL: https://${{ github.repository_owner }}.github.io/ranking/
         run: python3 .github/notify-discord.py
