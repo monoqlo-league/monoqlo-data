@@ -1,0 +1,48 @@
+# CSVが更新されたら、ファイル一覧(index.json)を作り直し、CSVを点検する。
+# - index.json はランキングページが最初に1回だけ読む一覧(ファイルごとの最終更新日時と対局数)。
+#   これがあれば、ページは GitHub の API(1時間60回の制限)を使わずに済む。
+# - 点検で問題が見つかったら Discord に知らせる(DISCORD_ADMIN_WEBHOOK_URL、無ければ DISCORD_WEBHOOK_URL)。
+# 「Actions」タブから手動で実行すると、全部のCSVを点検して結果を送る(問題がなくても送る)。
+name: データの一覧と点検
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.csv"
+  workflow_dispatch:
+
+concurrency:
+  group: build-index
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 一覧を作って点検する
+        env:
+          DATA_KIND: personal
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_ADMIN_WEBHOOK_URL: ${{ secrets.DISCORD_ADMIN_WEBHOOK_URL }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: python3 .github/build-index.py
+      - name: index.json を保存する
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          if git diff --cached --quiet; then echo "index.json は変わらない"; exit 0; fi
+          git commit -q -m "index.json を更新(自動)"
+          for i in 1 2 3; do
+            git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
