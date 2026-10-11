@@ -1,6 +1,6 @@
 {
- "generated": "2026-10-11T00:39:57+00:00",
- "latest": "2026-10-11T00:39:48Z",
+ "generated": "2026-10-11T00:43:38+00:00",
+ "latest": "2026-10-11T00:43:30Z",
  "files": {
   "202509.csv": {
    "updated": "2026-10-01T11:58:26Z",
@@ -87,6 +87,10 @@
   "summary/202511-summary.csv": {
    "updated": "2026-10-10T14:44:40Z",
    "size": 166097
+  },
+  "summary/202512-summary.csv": {
+   "updated": "2026-10-11T00:43:30Z",
+   "size": 141215
   },
   "summary/202601-summary.csv": {
    "updated": "2026-10-11T00:39:48Z",
