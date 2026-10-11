@@ -21,6 +21,7 @@ import urllib.request
 from collections import Counter, defaultdict
 
 KIND = os.environ.get("DATA_KIND", "team")
+INFO = "(情報)"          # この印で始まるものは、問題ではなくお知らせ。これだけのときは Discord に送らない(手動実行のときは送る)
 ZERO = "0" * 40
 PLAYER = re.compile(r"^\[[^\]]*\]\[(\d+)\](.*)$")
 
@@ -58,8 +59,9 @@ def clean_name(n):
 GAME_COLS = ["開始時間"] + [f"{i}位{x}" for i in range(1, 5) for x in ("プレイヤー名", "最終点数")]
 
 
-def read_games(path, problems):
-    """非表示を除いた対局の一覧。[{start, link, seats:[(id, name, pt, score)]}]。おかしな行は problems に入れる。"""
+def read_games(path, problems, where=None):
+    """非表示を除いた対局の一覧。[{start, link, row, seats:[(id, name, pt, score)]}]。おかしな行は problems に入れる。
+    where(行番号の一覧) は、問題の行がどこにあたるかの補足(個人戦では分割CSVの番号)を返す"""
     try:
         head, rows = rows_as_dicts(read_csv(path))
     except Exception as e:
@@ -101,21 +103,24 @@ def read_games(path, problems):
             dup.append(n)
             continue
         seen.add(key)
-        games.append({"start": (r.get("開始時間") or "").strip(), "link": link, "seats": seats})
+        games.append({"start": (r.get("開始時間") or "").strip(), "link": link, "row": n, "seats": seats})
     lim = lambda xs: "、".join(map(str, xs[:8])) + (f" ほか{len(xs) - 8}行" if len(xs) > 8 else "")
+    w = lambda xs: where(xs) if where else ""
     if bad_rows:
-        problems.append((path, f"プレイヤー名か点数が読めない行がある({lim(bad_rows)}行目)。その対局は集計に入らない"))
+        problems.append((path, f"プレイヤー名か点数が読めない行がある({lim(bad_rows)}行目){w(bad_rows)}。その対局は集計に入らない"))
     if sums:
-        problems.append((path, f"4人の点数の合計が合わない対局がある({lim(sorted(set(sums)))}行目)"))
+        problems.append((path, f"4人の点数の合計が合わない対局がある({lim(sorted(set(sums)))}行目){w(sums)}"))
     if order:
-        problems.append((path, f"終了時の点棒が着順どおりに並んでいない対局がある({lim(order)}行目)"))
+        problems.append((path, f"終了時の点棒が着順どおりに並んでいない対局がある({lim(order)}行目){w(order)}"))
     if dup:
-        problems.append((path, f"同じ対局が2回入っている({lim(dup)}行目)。2回目は数えない"))
+        problems.append((path, f"同じ対局が2回入っている({lim(dup)}行目){w(dup)}。2回目は数えない"))
     return games
 
 
-def check_summary(path, games, problems):
-    """詳細成績のもと(-summary.csv)。ゲームIDが対局記録にあるか、名前で結び付くか。"""
+def check_summary(path, games, problems, where_links=None):
+    """詳細成績のもと(-summary.csv)。ゲームIDが対局記録にあるか、名前で結び付くか。
+    where_links(ゲームIDの一覧) は、その対局がどこにあたるかの補足(個人戦では分割CSVの番号)を返す"""
+    wl = where_links or (lambda xs: "")
     try:
         head, rows = rows_as_dicts(read_csv(path))
     except Exception as e:
@@ -145,21 +150,23 @@ def check_summary(path, games, problems):
             iid_map[(r.get("内部ID") or "").strip()] = hit[0][0]
         else:
             pending.append((gid, name, (r.get("内部ID") or "").strip()))
+    bad_links = []
     for gid, name, iid in pending:
         pid = iid_map.get(iid)
         if not pid or not any(s[0] == pid for s in by_link[gid]["seats"]):
             unmatched.append(name or "(名前なし)")
+            bad_links.append(gid)
     if unknown:
         problems.append((path, f"対局記録にないゲームIDが{len(unknown)}件ある。その行は集計に入らない"))
     odd = [g for g, c in per_game.items() if c != 4]
     if odd:
-        problems.append((path, f"4人分そろっていない対局が{len(odd)}件ある"))
+        problems.append((path, f"4人分そろっていない対局が{len(odd)}件ある{wl(odd)}"))
     if unmatched:
         names = sorted(set(unmatched))
-        problems.append((path, f"対局記録の誰とも結び付かない行が{len(unmatched)}行ある(名前: {'、'.join(names[:6])}{' ほか' if len(names) > 6 else ''})"))
+        problems.append((path, f"対局記録の誰とも結び付かない行が{len(unmatched)}行ある(名前: {'、'.join(names[:6])}{' ほか' if len(names) > 6 else ''}){wl(bad_links)}"))
     lacking = [l for l in by_link if l not in per_game]
     if lacking and len(lacking) < len(by_link):
-        problems.append((path, f"対局記録のうち{len(lacking)}対局が、まだ集計されていない(情報。対局記録は{len(by_link)}対局)"))
+        problems.append((path, f"{INFO}対局記録のうち{len(lacking)}対局が、まだ集計されていない(対局記録は{len(by_link)}対局){wl(lacking)}"))
 
 
 # ---------- チーム戦(event-data) ----------
@@ -286,10 +293,32 @@ P_MONTH = re.compile(r"^(\d{4})(\d{2})\.csv$")
 P_SUMM = re.compile(r"^(?:summary/)?(\d{6})-summary\.csv$")
 
 
+def split_numbers(path, ym):
+    """分割CSV(splitdata-download の YYYYMM-連番.csv)の番号。月のCSVを開始時間の古い順に並べ、10対局ずつに分けたもの。
+    行番号 → 番号、牌譜リンク → 番号 の2つを返す。月のCSVを分割したあとで書き換えると、番号はずれる"""
+    rows = [(n, r) for n, r in enumerate(read_csv(path), start=1) if n > 1 and any(c.strip() for c in r)]
+    head = [h.strip() for h in read_csv(path)[0]]
+    ci, cl = (head.index("開始時間") if "開始時間" in head else 0), (head.index("牌譜リンク") if "牌譜リンク" in head else None)
+    by_row, by_link = {}, {}
+    for i, (n, r) in enumerate(sorted(rows, key=lambda x: x[1][ci] if ci < len(x[1]) else "")):
+        label = f"{ym}-{i // 10 + 1:02d}"
+        by_row[n] = label
+        if cl is not None and cl < len(r) and r[cl].strip():
+            by_link[r[cl].strip()] = label
+    return by_row, by_link
+
+
+def split_note(labels):
+    labels = sorted(set(l for l in labels if l))
+    if not labels:
+        return ""
+    return "〔分割CSV: " + "、".join(labels[:8]) + (f" ほか{len(labels) - 8}個" if len(labels) > 8 else "") + "〕"
+
+
 def check_personal(paths):
     problems, info = [], {}
     links = defaultdict(list)
-    games_by = {}
+    games_by, splits = {}, {}
     for p in paths:
         if not p.lower().endswith(".csv"):
             continue
@@ -302,25 +331,35 @@ def check_personal(paths):
         if not m:
             continue
         ym = m.group(1) + m.group(2)
-        gs = read_games(p, problems)
+        try:
+            splits[ym] = split_numbers(p, ym)
+        except Exception:
+            splits[ym] = ({}, {})
+        by_row = splits[ym][0]
+        gs = read_games(p, problems, where=lambda rows, b=by_row: split_note(b.get(n) for n in rows))
         games_by[ym] = gs
         info[p] = {"games": len(gs)}
         off = [g for g in gs if re.sub(r"\D", "", g["start"])[:6] != ym]
         if off:
-            problems.append((p, f"開始時間がこの月ではない対局が{len(off)}件ある"))
+            problems.append((p, f"開始時間がこの月ではない対局が{len(off)}件ある({'、'.join(str(g['row']) for g in off[:8])}行目){split_note(by_row.get(g['row']) for g in off)}"))
         for g in gs:
             if g["link"]:
                 links[g["link"]].append(p)
-    multi = Counter(tuple(v) for v in links.values() if len(v) > 1)
-    for files, n in multi.items():
-        problems.append((files[-1], f"{'・'.join(files)} の両方に同じ対局が{n}件ある(通算では1回だけ数える)"))
+    multi = defaultdict(list)
+    for link, v in links.items():
+        if len(v) > 1:
+            multi[tuple(v)].append(link)
+    for files, ls in multi.items():
+        labels = [splits.get(P_MONTH.match(f).group(1) + P_MONTH.match(f).group(2), ({}, {}))[1].get(l) for f in files for l in ls]
+        problems.append((files[-1], f"{'・'.join(files)} の両方に同じ対局が{len(ls)}件ある(通算では1回だけ数える){split_note(labels)}"))
     for p in paths:
         m = P_SUMM.match(p)
         if m:
             if m.group(1) not in games_by:
                 problems.append((p, f"対応する対局記録({m.group(1)}.csv)がない"))
             else:
-                check_summary(p, games_by[m.group(1)], problems)
+                bl = splits.get(m.group(1), ({}, {}))[1]
+                check_summary(p, games_by[m.group(1)], problems, where_links=lambda ls, bl=bl: split_note(bl.get(l) for l in ls))
     if "ban.csv" in paths:
         bad = []
         for n, r in enumerate(read_csv("ban.csv"), start=1):
@@ -387,17 +426,23 @@ def main():
         with open(summary_file, "a", encoding="utf-8") as f:
             f.write("## データの点検\n\n" + ("\n".join(f"- `{p}` … {m}" for p, m in problems) if problems else "問題なし") + "\n")
 
-    if not problems and not manual:
+    real = [x for x in problems if not x[1].startswith(INFO)]
+    if not real and not manual:
+        if problems:
+            print("お知らせだけなので、Discord には送らない")
         return
     title = "チーム戦" if KIND == "team" else "個人戦"
-    if problems:
+    if real:
         lines = [f"⚠️ **{title}のデータの点検で、気になる点が見つかりました**"]
+        problems = real + [x for x in problems if x[1].startswith(INFO)]
         for p, m in problems[:15]:
             lines.append(f"・`{p}`:{m}")
         if len(problems) > 15:
             lines.append(f"・ほか{len(problems) - 15}件(GitHub の Actions の画面で全部見られます)")
     else:
         lines = [f"✅ **{title}のデータの点検:問題なし**", f"CSV {len(files)}ファイルを点検しました。"]
+        for p, m in problems[:15]:
+            lines.append(f"・`{p}`:{m}")
     content = "\n".join(lines)[:1900]
     print(content)
     if os.environ.get("DRY_RUN"):
