@@ -111,10 +111,30 @@ CSVをアップロードすると、GitHub Actions が自動で次の2つを行�
 - 設定の確認は「Actions」タブ →「Discordへ更新を通知」→「Run workflow」で、テストの通知を送れる。
 - 通知の動作は「Actions」タブで確認できる。仕組みは `.github/workflows/discord-notify.yml` と `.github/notify-discord.py`。
 
+## 分割CSVの自動作成
+
+対局記録(`YYYYMM.csv`)をアップロードすると、[splitdata-download](https://github.com/monoqlo-league/splitdata-download) に、まだ分割していない対局を10対局ずつのCSVにして足すよう知らせる。分割のきまりは splitdata-download の README を参照。
+
+知らせるためのトークンの設定(管理者が最初に1回だけ行う):
+
+1. GitHub の右上のアイコン →「Settings」→「Developer settings」→「Personal access tokens」→「Fine-grained tokens」→「Generate new token」を押す。
+2. 次のように入れて「Generate token」を押す。
+   - Token name: 何でもよい(例:`split-dispatch`)
+   - Expiration: 期限。切れたら作り直して Secret を入れ替える
+   - Resource owner: **`monoqlo-league`**
+   - Repository access: **Only select repositories** → **`splitdata-download`** だけ
+   - Permissions → Repository permissions → **Contents** を **Read and write**(ほかは触らない)
+3. 表示されたトークンをコピーする(この画面を閉じると二度と見られない)。
+4. このリポジトリの「Settings」→「Secrets and variables」→「Actions」→「New repository secret」で、Name に **`SPLIT_DISPATCH_TOKEN`**、Secret にトークンを貼って「Add secret」を押す。
+
+- Resource owner に `monoqlo-league` が出ない、または承認待ちになるときは、組織の「Settings」→「Personal access tokens」で fine-grained トークンを許可する(組織のオーナーが行う)。
+- Secret が未設定・期限切れのあいだは、すぐには分割されない。splitdata-download が1日1回(朝4時ごろ)自分で確かめて分割する。
+- 動作は「Actions」タブ →「分割CSVの作成を頼む」で確認できる。仕組みは `.github/workflows/split-dispatch.yml`。
+
 ## ファイル
 
 - `YYYYMM.csv` … 各シーズンの対局記録
 - `summary/YYYYMM-summary.csv` … 各シーズンの詳細成績の集計(牌譜から書き出したもの。ある月だけ)
 - `ban.csv` … BANリスト
 - `index.json` … ファイル一覧(自動で作られる。手で変更しない)
-- `.github/` … Discordへの更新通知と、ファイル一覧・点検の仕組み(変更しない)
+- `.github/` … Discordへの更新通知、ファイル一覧・点検、分割CSVの作成依頼の仕組み(変更しない)

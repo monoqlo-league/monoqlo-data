@@ -1,0 +1,31 @@
+# 対局記録のCSV(YYYYMM.csv)が更新されたら、splitdata-download に分割CSVを作るよう知らせる。
+# 知らせるには、splitdata-download に書き込めるトークンを Secrets の SPLIT_DISPATCH_TOKEN に入れておく。
+# (無いときは何もしない。splitdata-download は1日1回、自分でも確かめる)
+name: 分割CSVの作成を頼む
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "[0-9][0-9][0-9][0-9][0-9][0-9].csv"
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: splitdata-download に知らせる
+        env:
+          TOKEN: ${{ secrets.SPLIT_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::SPLIT_DISPATCH_TOKEN が無いので知らせない(splitdata-download の1日1回の確認で分割される)"
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/monoqlo-league/splitdata-download/dispatches \
+            -d '{"event_type":"monoqlo-data-updated"}'
+          echo "知らせた"
