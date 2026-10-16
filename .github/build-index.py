@@ -49,6 +49,11 @@ def rows_as_dicts(rows):
     return head, out
 
 
+def is_cpu(n):
+    """CPU の席(対局者欄が「CPU」)。誰の席かわからないだけで、データの誤りではないので知らせない"""
+    return unicodedata.normalize("NFKC", n or "").strip().upper() == "CPU"
+
+
 def clean_name(n):
     n = unicodedata.normalize("NFKC", n or "").strip()
     n = re.sub(r"\s*[(（]\s*[)）]\s*$", "", n)
@@ -77,7 +82,8 @@ def read_games(path, problems, where=None):
             continue
         seats = []
         for i in range(1, 5):
-            m = PLAYER.match((r.get(f"{i}位プレイヤー名") or "").strip())
+            cell = (r.get(f"{i}位プレイヤー名") or "").strip()
+            m = PLAYER.match(cell)
             try:
                 pt = float(r.get(f"{i}位最終点数") or "")
             except ValueError:
@@ -86,6 +92,9 @@ def read_games(path, problems, where=None):
                 sc = float(r.get(f"{i}位PT") or "") if (r.get(f"{i}位PT") or "").strip() else None
             except ValueError:
                 sc = None
+            if is_cpu(cell):
+                seats.append(("CPU", "CPU", pt, sc))
+                continue
             seats.append((m.group(1) if m else None, clean_name(m.group(2)) if m else "", pt, sc))
         if any(s[0] is None or s[2] is None for s in seats):
             bad_rows.append(n)
@@ -145,6 +154,8 @@ def check_summary(path, games, problems, where_links=None):
             continue
         per_game[gid] += 1
         name = clean_name(r.get("名前"))
+        if is_cpu(name):
+            continue
         hit = [s for s in g["seats"] if s[1] == name]
         if len(hit) == 1:
             iid_map[(r.get("内部ID") or "").strip()] = hit[0][0]
@@ -271,7 +282,7 @@ def check_team(paths):
             games_by[k] = gs
             info[gpath] = {"games": len(fresh)}
             if roster:
-                outsiders = sorted({s[1] or s[0] for g in fresh for s in g["seats"] if s[0] not in roster})
+                outsiders = sorted({s[1] or s[0] for g in fresh for s in g["seats"] if s[0] not in roster and s[0] != "CPU"})
                 if outsiders:
                     problems.append((gpath, f"大会マスターにないプレイヤーがいる(チーム順位に入らない): {'、'.join(outsiders[:6])}{' ほか' if len(outsiders) > 6 else ''}"))
             p = planned.get(k - 1)
