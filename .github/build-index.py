@@ -315,8 +315,41 @@ def split_note(labels):
     return "〔分割CSV: " + "、".join(labels[:8]) + (f" ほか{len(labels) - 8}個" if len(labels) > 8 else "") + "〕"
 
 
+def team_links():
+    """チーム戦の対局(牌譜リンク)。event-data のフォルダ(環境変数 EVENT_DATA)の *-gamesN.csv から。無ければ None"""
+    d = os.environ.get("EVENT_DATA", "")
+    if not d or not os.path.isdir(d):
+        return None
+    out = set()
+    for name in os.listdir(d):
+        if re.fullmatch(r"\d{8}-games\d+\.csv", name):
+            try:
+                head, rows = rows_as_dicts(read_csv(os.path.join(d, name)))
+            except Exception:
+                continue
+            out.update((r.get("牌譜リンク") or "").strip() for r in rows)
+    out.discard("")
+    return out
+
+
+def previous_links(path):
+    """このファイルを最後に変えたコミットの、ひとつ前の版にあった対局(牌譜リンク、非表示を除く)。前の版が無ければ None"""
+    c = (git("log", "-1", "--format=%H", "--", path) or "").strip()
+    text = git("show", f"{c}^:{path}") if c else None
+    if text is None:
+        return None
+    head, rows = rows_as_dicts(list(csv.reader(io.StringIO(text.lstrip("\ufeff")))))
+    return {(r.get("牌譜リンク") or "").strip() for r in rows if (r.get("非表示状態") or "").strip().lower() != "yes"} - {""}
+
+
+SPLIT_STOP = 10   # 分割CSV(splitdata-download)は、分割済みの対局がこの数以上なくなった月を分割しない
+
+
 def check_personal(paths):
     problems, info = [], {}
+    team = team_links()
+    if team is None:
+        print("::warning::event-data が見つからないため、チーム戦の対局が混ざっていないかは確かめない")
     links = defaultdict(list)
     games_by, splits = {}, {}
     for p in paths:
@@ -345,6 +378,23 @@ def check_personal(paths):
         for g in gs:
             if g["link"]:
                 links[g["link"]].append(p)
+        # チーム戦の対局記録を誤って上げていないか
+        if team:
+            mixed = [g for g in gs if g["link"] in team]
+            if mixed:
+                whole = len(mixed) == len(gs)
+                problems.append((p, (f"中身がすべてチーム戦の対局({len(gs)}対局)。チーム戦の対局記録を誤って上げた可能性が高い。"
+                                     if whole else f"チーム戦の対局が{len(mixed)}対局入っている。") +
+                                 "ランキングにそのまま出るので、正しいCSVで上書きするか「History」から前の版に戻す。分割CSVには入らない"))
+        # 前の版にあった対局がなくなっていないか(月のCSVは、毎回その月の全対局を入れて上書きするので、ふつうは減らない)
+        prev = previous_links(p)
+        if prev:
+            now = {g["link"] for g in gs}
+            gone = prev - now - (team or set())
+            if gone:
+                stop = f"分割CSVは、正しいCSVに戻るまでこの月を分割しない。" if len(gone) >= SPLIT_STOP else ""
+                problems.append((p, f"前の版にあった対局のうち{len(gone)}対局が、今回の版にない(前の版は{len(prev)}対局、今回は{len(gs)}対局)。"
+                                    f"別の月やチーム戦のCSVを上げていないか確かめる。{stop}"))
     multi = defaultdict(list)
     for link, v in links.items():
         if len(v) > 1:

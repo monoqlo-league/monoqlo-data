@@ -25,9 +25,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: チーム戦の対局記録を取ってくる(チーム戦のCSVを誤って上げていないか確かめるため)
+        uses: actions/checkout@v4
+        with:
+          repository: monoqlo-league/event-data
+          path: _event
       - name: 一覧を作って点検する
         env:
           DATA_KIND: personal
+          EVENT_DATA: _event
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_ADMIN_WEBHOOK_URL: ${{ secrets.DISCORD_ADMIN_WEBHOOK_URL }}
           BEFORE: ${{ github.event.before }}
