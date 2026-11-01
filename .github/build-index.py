@@ -368,7 +368,7 @@ def check_personal(paths):
             continue
         if P_SUMM.match(p) and not p.startswith("summary/"):
             problems.append((p, "詳細成績のもとは summary フォルダに置くことになっている(このままでも読まれる)"))
-        elif not (P_MONTH.match(p) or P_SUMM.match(p) or p == "ban.csv"):
+        elif not (P_MONTH.match(p) or P_SUMM.match(p) or p in ("ban.csv", "account-change.csv")):
             problems.append((p, "名前がルールと違うため、ランキングでは読み込まれない(例: 202610.csv)"))
     for p in sorted(paths):
         m = P_MONTH.match(p)
@@ -435,6 +435,20 @@ def check_personal(paths):
                 bad.append(n)
         if bad:
             problems.append(("ban.csv", f"読めない行がある({'、'.join(map(str, bad[:8]))}行目)。1列目は [JP][ID]名前 かID、2列目は YYYYMM"))
+    if "account-change.csv" in paths:
+        bad = []
+        for n, r in enumerate(read_csv("account-change.csv"), start=1):
+            if not any(c.strip() for c in r):
+                continue
+            a, b = (r[0] if r else "").strip(), (r[1] if len(r) > 1 else "").strip()
+            okid = re.search(r"\[(\d+)\]", a) or re.fullmatch(r"\d+", a)
+            okym = not b or re.fullmatch(r"\d{4}(0[1-9]|1[0-2])", b)   # 変更月は記録用(空欄可)
+            if n == 1 and not okid:
+                continue                                  # 見出し行
+            if not (okid and okym):
+                bad.append(n)
+        if bad:
+            problems.append(("account-change.csv", f"読めない行がある({'、'.join(map(str, bad[:8]))}行目)。1列目は [JP][ID]名前 かID、2列目は空欄か YYYYMM"))
     return problems, info
 
 
